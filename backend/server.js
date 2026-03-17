@@ -1,67 +1,99 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const express = require("express");
-const mysql = require("mysql2");
-const cors = require("cors");
-const dotenv = require("dotenv");
+require('dotenv').config(); // PART 3: Security
+const express = require('express');
+const mysql = require('mysql2');
+const cors = require('cors');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-dotenv.config();
 const app = express();
-
-// Enable CORS so your GitHub Pages frontend can talk to Render
 app.use(cors());
 app.use(express.json());
 
-// 1. Initialize Gemini AI
+// PART 3: Gemini AI Setup using Environment Variables
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// 2. Database Connection
+// Database Connection with Part 1 Logging
 const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'wellness_db'
 });
 
-// 3. POST Route: Save mood and get AI response
-app.post("/moods", async (req, res) => {
-    const { mood, mood_level } = req.body;
-
-    try {
-        const prompt = `The user says they are feeling: "${mood}". Give a very short, supportive, and empathetic response (max 2 sentences).`;
-        const result = await model.generateContent(prompt);
-        const aiResponse = result.response.text();
-
-        const sql = "INSERT INTO moods (mood_text, ai_response, mood_level) VALUES (?, ?, ?)";
-        db.query(sql, [mood, aiResponse, mood_level], (err, data) => {
-            if (err) {
-                console.error("DB Error:", err);
-                return res.status(500).json(err);
-            }
-            return res.json({
-                message: "Success!",
-                ai_response: aiResponse
-            });
-        });
-
-    } catch (error) {
-        console.error("Gemini Error:", error);
-        res.status(500).json({ error: "The AI is sleepy right now." });
+db.connect((err) => {
+    if (err) {
+        // PART 1: Bug Catching - Database Connection
+        console.error("❌ [PART 1] Database Connection Failed:", err.message);
+    } else {
+        console.log("✅ [PART 1] Connected to MySQL Database Successfully");
     }
 });
 
-// 4. GET Route: Fetch reflection history
-app.get("/moods", (req, res) => {
-    const sql = "SELECT * FROM moods ORDER BY created_at DESC";
-    db.query(sql, (err, data) => {
-        if (err) return res.status(500).json(err);
-        return res.json(data);
+// PART 4: System Health Check Endpoint
+app.get("/health", (req, res) => {
+    console.log("📡 [PART 4] Health Check Pinged at " + new Date().toISOString());
+    res.json({
+        status: "OK",
+        message: "API is alive and running for Reniel!",
+        timestamp: new Date().toISOString()
     });
 });
 
-// 5. Dynamic Port for Render Deployment
-const PORT = process.env.PORT || 8081;
+// GET Moods with Logging
+app.get('/moods', (req, res) => {
+    console.log("📥 [PART 0] Request: GET /moods (Fetching history)");
+    const query = "SELECT * FROM mood_log ORDER BY created_at DESC";
+    
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("❌ [PART 1] SQL Error (GET):", err.message);
+            return res.status(500).json({ error: "Database fetch failed" });
+        }
+        console.log(`✅ [PART 0] Success: Fetched ${results.length} entries`);
+        res.json(results);
+    });
+});
+
+// POST Mood with Part 0 & Part 2 Debugging
+app.post('/moods', async (req, res) => {
+    // PART 0.2: Advanced Logging
+    console.log("-----------------------------------------");
+    console.log("📥 [PART 0] New POST Request Received");
+    console.log("📦 [PART 0] Data from Reniel's UI:", req.body);
+
+    const { journal_entry, mood_level } = req.body;
+
+    // PART 3.1: Parameterized Query for Security
+    const query = "INSERT INTO mood_log (mood_text, ai_response, mood_level) VALUES (?, ?, ?)";
+
+    try {
+        console.log("🤖 [PART 2] Calling Gemini AI for Counselor Response...");
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const prompt = `The user says: "${journal_entry}". They rated their mood as ${mood_level}/10. Give a short, supportive response.`;
+        
+        const result = await model.generateContent(prompt);
+        const aiResponse = result.response.text();
+        
+        // PART 2: Observing Network and AI Response
+        console.log("✨ [PART 2] Gemini Success: " + aiResponse.substring(0, 30) + "...");
+
+        db.query(query, [journal_entry, aiResponse, mood_level], (err, result) => {
+            if (err) {
+                console.error("❌ [PART 1] Database Insert Error:", err.message);
+                return res.status(500).json({ error: "Failed to save to database" });
+            }
+            console.log("💾 [PART 0] Record successfully saved with ID:", result.insertId);
+            res.json({ ai_response: aiResponse });
+        });
+
+    } catch (error) {
+        // PART 1: System Crash Logging
+        console.error("❌ [PART 1] SYSTEM CRASH:", error.message);
+        res.status(500).json({ error: "Gemini AI failed - check API Key in Render environment" });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is bumping on port ${PORT}, sah!`);
+    console.log(`🚀 [SYSTEM] Server running on http://localhost:${PORT}`);
+    console.log(`🩺 [SYSTEM] Health check: http://localhost:${PORT}/health`);
 });

@@ -8,6 +8,7 @@
         </div>
         <h1>MindfulPath</h1>
         <p>A space for your thoughts, powered by Gemini AI.</p>
+        <button @click="checkApiHealth" class="health-check-btn">🔍 Check System Aura</button>
       </header>
 
       <div class="main-layout">
@@ -97,7 +98,7 @@ const isSubmitting = ref(false);
 const aiMessage = ref('');
 const newEntry = ref({ mood_level: 5, journal_entry: '' });
 
-// 1. ENSURE THIS URL IS CORRECT (No trailing slash)
+// 1. ENSURE THIS URL IS CORRECT (Updated for your Render link)
 const API_URL = 'https://se2-lab6-backend.onrender.com';
 
 const currentDateTime = computed(() => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }));
@@ -115,34 +116,60 @@ const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
 };
 
+// LAB 7: Part 4 Health Check Logic
+const checkApiHealth = async () => {
+  console.log("🔍 [PART 4] Running Health Check...");
+  try {
+    const res = await axios.get(`${API_URL}/health`);
+    console.log("✅ API Health Status:", res.data);
+    alert(`System Status: ${res.data.status}\nMessage: ${res.data.message}`);
+  } catch (err) {
+    console.error("❌ Health Check Failed:", err);
+    alert("API is down! Check your Render dashboard.");
+  }
+};
+
 const fetchHistory = async () => {
+  console.log("📂 [PART 0] Fetching reflections...");
   try {
     const res = await axios.get(`${API_URL}/moods`);
     history.value = res.data;
+    console.log(`✅ Loaded ${res.data.length} entries`);
   } catch (err) { 
-    console.error("Cloud Error:", err); 
+    console.error("❌ Cloud Fetch Error:", err); 
   }
 };
 
 const saveMood = async () => {
   if (!newEntry.value.journal_entry.trim()) return;
   
+  // PART 0.1: Initial Logging Setup
+  console.log("🚀 [PART 0] 'Sync to Cloud' Triggered");
+  console.log("📊 Data to send:", { 
+    journal_entry: newEntry.value.journal_entry, 
+    mood_level: newEntry.value.mood_level 
+  });
+  
   isSubmitting.value = true;
   aiMessage.value = ''; 
   
   try {
-    // FIX: Sending 'mood' to match your backend's req.body.mood
     const response = await axios.post(`${API_URL}/moods`, {
-      mood: newEntry.value.journal_entry,
+      journal_entry: newEntry.value.journal_entry,
       mood_level: parseInt(newEntry.value.mood_level)
     });
+    
+    // PART 2: Network Analysis
+    console.log("📡 [PART 2] Server Response Received:", response.status);
+    console.log("🤖 AI Response Content:", response.data.ai_response);
     
     aiMessage.value = response.data.ai_response;
     newEntry.value.journal_entry = '';
     await fetchHistory();
   } catch (err) {
-    // This alert triggers if the server is still "spinning up" or if there's a CORS error
-    alert("The Cloud API is waking up... give it 30 seconds and try again!");
+    // PART 1: Error Catching
+    console.error("❌ [PART 1] Sync Failed:", err.response ? err.response.data : err.message);
+    alert("The Cloud API is waking up... give it 30 seconds!");
   } finally { 
     isSubmitting.value = false; 
   }
@@ -154,11 +181,13 @@ const getMoodColor = (s) => {
   return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 };
 
-onMounted(fetchHistory);
+onMounted(() => {
+  console.log("⚡ System Ready for Reniel - Lab 7 Mode Active");
+  fetchHistory();
+});
 </script>
 
 <style scoped>
-/* Keeping your peak styling exactly as provided */
 .wellness-app { 
   background: radial-gradient(circle at top left, #fdfbfb 0%, #ebedee 100%);
   min-height: 100vh; 
@@ -174,6 +203,20 @@ onMounted(fetchHistory);
 .hero h1 { font-size: 2.5rem; letter-spacing: -1px; margin: 10px 0; color: #1e272e; }
 .hero p { color: #7f8c8d; font-size: 1.1rem; }
 .logo-icon { font-size: 3rem; display: block; filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1)); }
+
+.health-check-btn {
+  margin-top: 15px;
+  background: #00b894;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.3s;
+}
+.health-check-btn:hover { background: #00947a; transform: scale(1.05); }
+
 .main-layout { display: grid; grid-template-columns: 1fr 1.3fr; gap: 40px; }
 .card { 
   background: rgba(255, 255, 255, 0.8);
@@ -222,12 +265,13 @@ textarea:focus { outline: none; background: white; border-color: #00b894; box-sh
 .mood-meta { margin-bottom: 8px; }
 .user-text { font-weight: 500; margin-bottom: 12px; }
 .ai-mini-reply { background: #f8f9fa; padding: 12px; border-radius: 12px; font-style: italic; color: #636e72; }
-.bounce-enter-active { animation: bounce-in 0.5s; }
+
 @keyframes bounce-in {
   0% { transform: scale(0); }
   50% { transform: scale(1.2); }
   100% { transform: scale(1); }
 }
+.bounce-enter-active { animation: bounce-in 0.5s; }
 .typing-text { opacity: 0.6; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
 @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } .card { position: relative; top: 0; } }
